@@ -1,4 +1,4 @@
-module poisson_test
+module fft_poisson_test
     implicit none
     include 'fftw3.f'
     double precision, parameter :: pi = acos(-1.0d0)
@@ -179,13 +179,13 @@ contains
         write(11, *) dX, error_norm
         close(11)
     end subroutine cal_error
-end module poisson_test
+end module fft_poisson_test
 
 !************************
 !   メインプログラム    *
 !************************
 program main
-    use poisson_test
+    use fft_poisson_test
     implicit none
     double precision X(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
     double precision Y(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
