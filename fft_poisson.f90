@@ -11,9 +11,10 @@ module fft_poisson_test
     integer, save :: Ng                             !格子点数
     double precision, save :: ddt                   !時間の刻み幅の逆数
     double precision, save :: dX, dY, dZ            !各方向の刻み幅
-    double precision, save :: ddX, ddY, ddZ    !各方向の刻み幅の逆数
-    double precision, save :: ddX2, ddY2, ddZ2 !各方向の刻み幅の逆数の二乗
+    double precision, save :: ddX, ddY, ddZ         !各方向の刻み幅の逆数
+    double precision, save :: ddX2, ddY2, ddZ2      !各方向の刻み幅の逆数の二乗
     double precision, save :: Xmin, Ymin, Zmin      !各方向の計算領域の最小値
+    double precision, save :: plan_1d               !FFTplan
 contains
 !****************
 !   格子を設定  *
@@ -101,34 +102,63 @@ contains
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
                 do iX = NXmin, NXmax
-                    divU(iX,iY,iZ) = ddX*(-Vx_p(iX-1,iY,iZ) + Vx_p(iX,iY,iZ)) &
+                    divU(iX,iY,iZ) = ddt*(ddX*(-Vx_p(iX-1,iY,iZ) + Vx_p(iX,iY,iZ)) &
                                     + ddY*(-Vy_p(iX,iY-1,iZ) + Vy_p(iX,iY,iZ)) &
-                                    + ddZ*(-Vz_p(iX,iY,iZ-1) + Vz_p(iX,iY,iZ))
+                                    + ddZ*(-Vz_p(iX,iY,iZ-1) + Vz_p(iX,iY,iZ)))
                 enddo
             enddo
         enddo
     end subroutine cal_poisson_rhs
+!****************
+!   plan生成    *
+!****************
+    subroutine FFT_init
+        double precision AL(NXmin:NXmax)
+        double complex BL(NXmin-1:NXmax/2)
+        call dfftw_plan_dft_r2c_1d(plan_1d, NXmax, AL, BL, FFTW_ESTIMATE)
+    end subroutine FFT_init
+!************************
+!   FFT(1次元)を実行    *
+!************************
+    subroutine FFT_1d_exe(RHS, RHSf)
+        double precision, intent(in) :: RHS(NXmin:NXmax)
+        double complex, intent(out) :: RHSf(NXmin-1:NXmax/2)
+        call dfftw_execute(plan_1d)
+    end subroutine FFT_1d_exe
 !***************************************
 !   ポアソン方程式の右辺をFFT(x方向)   *
 !***************************************
     subroutine FFT_rhs(divU, divUf)
         double precision, intent(in) :: divU(NXmin:NXmax, NYmin:NYmax, NZmin:NZmax)
-        double complex, intent(out) :: divUf(NXmin:NXmax/2+1, NYmin:NYmax, NZmin:NZmax)
-        double complex RHSf(NXmin:NXmax/2+1)
-        double precision plan
+        double complex, intent(out) :: divUf(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        double complex RHSf(NXmin-1:NXmax/2)
         integer iY, iZ
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
-                call dfftw_plan_dft_r2c_1d(plan, NXmax, divU(NXmin:NXmax, iY, iZ), RHSf, FFTW_ESTIMATE)
-                call dfftw_execute(plan)
-                call dfftw_destroy_plan(plan)
-                divUf(NXmin:NXmax/2+1, iY, iZ) = RHSf(NXmin:NXmax/2+1)
+                call FFT_1d_exe(divU(NXmin:NXmax, iY, iZ), RHSf)
+                divUf(NXmin-1:NXmax/2, iY, iZ) = RHSf(NXmin-1:NXmax/2)
             enddo
         enddo
     end subroutine FFT_rhs
 !********************************
 !   ポアソン方程式の反復計算    *
 !********************************
+    subroutine itr_poisson(divUf, Phif)
+        double complex, intent(in) :: divUf(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        double complex, intent(out) :: Phif(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        double complex Er(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        double precision B0
+        integer kX, iY, iZ, itr, itrmax
+        itrmax = 10000
+        do kX = NXmin-1, NXmax/2
+            do itr = 1, itrmax
+                do iZ = NZmin, NZmax
+                    do iY = NYmin, NYmax
+                    enddo
+                enddo
+            enddo
+        enddo
+    end subroutine itr_poisson
 !****************************************
 !   ポアソン方程式を解くサブルーチン    *
 !****************************************
@@ -141,8 +171,12 @@ contains
         double precision, intent(in) :: Vz_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         double precision divU(NXmin:NXmax, NYmin:NYmax, NZmin:NZmax)
+        double complex divUf(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        double complex Phif(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
         !---右辺を計算---
         call cal_poisson_rhs(Vx_p, Vy_p, Vz_p, divU)
+        !---右辺をFFT---
+        call FFT_rhs(divU, divUf)
     end subroutine cal_poisson
 !********************************
 !   誤差を計算するサブルーチン  *
@@ -196,6 +230,7 @@ program main
     double precision Vy_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
     double precision Vz_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
     call set_grid(X, Y, Z)
+    call FFT_init
     call set_velocity(Vx_p, Vy_p, Vz_p, X, Y, Z)
     call cal_theory(Phi_th, X, Y, Z)
     call cal_poisson(Vx_p, Vy_p, Vz_p, Phi, X, Y, Z)
