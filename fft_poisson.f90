@@ -7,15 +7,13 @@ module fft_poisson_test
     integer, parameter :: NZmin = 1, NZmax = 32     !z方向の計算領域の形状
     double precision, parameter :: Xmax = 2.0d0*pi, Ymax = 2.0d0*pi, Zmax = 2.0d0*pi  !各方向の計算領域の最大値
     double precision, parameter :: NU = 1.0d0       !動粘性係数
-    double precision, parameter :: dt = 1.0d-2      !時間の刻み幅
+    double precision, parameter :: dt = 1.0d0      !時間の刻み幅
     integer, save :: Ng                             !格子点数
     double precision, save :: ddt                   !時間の刻み幅の逆数
     double precision, save :: dX, dY, dZ            !各方向の刻み幅
     double precision, save :: ddX, ddY, ddZ         !各方向の刻み幅の逆数
     double precision, save :: ddX2, ddY2, ddZ2      !各方向の刻み幅の逆数の二乗
     double precision, save :: Xmin, Ymin, Zmin      !各方向の計算領域の最小値
-    double precision, save :: plan_1d_fft           !フーリエ変換のplan
-    double precision, save :: plan_1d_ifft          !逆フーリエ変換のplan
     double precision, save :: X(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)  !X座標
     double precision, save :: Y(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)  !Y座標
     double precision, save :: Z(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)  !Z座標
@@ -107,42 +105,48 @@ contains
 !******************************
 !   フーリエ変換のplan生成    *
 !******************************
-    subroutine FFT_init
-        double precision AL(NXmin:NXmax)
-        double complex BL(NXmin-1:NXmax/2)
-        call dfftw_plan_dft_r2c_1d(plan_1d_fft, NXmax, AL, BL, FFTW_ESTIMATE)
-    end subroutine FFT_init
+!    subroutine FFT_init
+!        double precision AL(NXmin:NXmax)
+!        double complex BL(NXmin-1:NXmax/2)
+!        call dfftw_plan_dft_r2c_1d(plan_1d_fft, NXmax, AL, BL, FFTW_ESTIMATE)
+!    end subroutine FFT_init
 !********************************
 !   逆フーリエ変換のplan生成    *
 !********************************
-    subroutine IFFT_init
-        double precision AL(NXmin:NXmax)
-        double complex BL(NXmin-1:NXmax/2)
-        call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax, BL, AL, FFTW_ESTIMATE)
-    end subroutine IFFT_init
+!    subroutine IFFT_init
+!        double precision AL(NXmin-1:NXmax+1)
+!        double complex BL(NXmin-1:(NXmax+1)/2)
+!        call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax+1, BL, AL, FFTW_ESTIMATE)
+!    end subroutine IFFT_init
 !************************
 !   FFT(1次元)を実行    *
 !************************
     subroutine FFT_1d_exe(RHS, RHSf)
         double precision, intent(in) :: RHS(NXmin:NXmax)
         double complex, intent(out) :: RHSf(NXmin-1:NXmax/2)
+        double precision plan_1d_fft
+        call dfftw_plan_dft_r2c_1d(plan_1d_fft, NXmax, RHS, RHSf, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_fft, RHS, RHSf)
+        call dfftw_destroy_plan(plan_1d_fft)
     end subroutine FFT_1d_exe
 !************************
 !   IFFT(1次元)を実行   *
 !************************
     subroutine IFFT_1d_exe(Phif, Phi)
-        double complex, intent(in) :: Phif(NXmin-1:NXmax/2)
-        double precision, intent(out) :: Phi(NXmin:NXmax)
+        double complex, intent(in) :: Phif(NXmin-1:(NXmax+1)/2)
+        double precision, intent(out) :: Phi(NXmin-1:NXmax+1)
+        double precision plan_1d_ifft
+        call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax+1, Phif, Phi, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_ifft, Phif, Phi)
+        call dfftw_destroy_plan(plan_1d_ifft)
     end subroutine IFFT_1d_exe
 !******************
 !   planを破壊    *
 !******************
-    subroutine destroy_plan
-        call dfftw_destroy_plan(plan_1d_fft)
-        call dfftw_destroy_plan(plan_1d_ifft)
-    end subroutine destroy_plan
+!    subroutine destroy_plan
+!        call dfftw_destroy_plan(plan_1d_fft)
+!        call dfftw_destroy_plan(plan_1d_ifft)
+!    end subroutine destroy_plan
 !***************************************
 !   ポアソン方程式の右辺をFFT(x方向)   *
 !***************************************
@@ -156,7 +160,11 @@ contains
             do iY = NYmin, NYmax
                 RHS(NXmin:NXmax) = divU(NXmin:NXmax, iY, iZ)
                 call FFT_1d_exe(RHS, RHSf)
+                write(*, *) RHSf
+                stop
                 divUf(NXmin-1:NXmax/2, iY, iZ) = RHSf(NXmin-1:NXmax/2)
+                !write(*, *) divUf(:, iY, iZ)
+                !stop
             enddo
         enddo
     end subroutine FFT_rhs
@@ -182,18 +190,10 @@ contains
 !********************************************
     subroutine set_bc_itr(Phif)
         double complex, intent(out) :: Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        Phif(NXmin-1:NXmax/2,NYmin-1,NZmin:NZmax) = -ddt*(cos(X(NXmin-1:NXmax/2,NYmin-1,NZmin:NZmax)) &
-                                                    + cos(Y(NXmin-1:NXmax/2,NYmin-1,NZmin:NZmax)) &
-                                                    + cos(Z(NXmin-1:NXmax/2,NYmin-1,NZmin:NZmax)))
-        Phif(NXmin-1:NXmax/2,NYmax+1,NZmin:NZmax) = -ddt*(cos(X(NXmin-1:NXmax/2,NYmax+1,NZmin:NZmax)) &
-                                                + cos(Y(NXmin-1:NXmax/2,NYmax+1,NZmin:NZmax)) &
-                                                + cos(Z(NXmin-1:NXmax/2,NYmax+1,NZmin:NZmax)))
-        Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmin-1) = -ddt*(cos(X(NXmin-1:NXmax/2,NYmin:NYmax,NZmin-1)) &
-                                                + cos(Y(NXmin-1:NXmax/2,NYmin:NYmax,NZmin-1)) &
-                                                + cos(Z(NXmin-1:NXmax/2,NYmin:NYmax,NZmin-1)))
-        Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmax+1) = -ddt*(cos(X(NXmin-1:NXmax/2,NYmin:NYmax,NZmax+1)) &
-                                                + cos(Y(NXmin-1:NXmax/2,NYmin:NYmax,NZmax+1)) &
-                                                + cos(Z(NXmin-1:NXmax/2,NYmin:NYmax,NZmax+1)))
+        Phif(NXmin-1:NXmax/2,NYmin-1,NZmin:NZmax) = Phif(NXmin-1:NXmax/2,NYmin,NZmin:NZmax)
+        Phif(NXmin-1:Nxmax/2,NYmax+1,NZmin:NZmax) = Phif(NXmin-1:NXmax/2,NYmax,NZmin:NZmax)
+        Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmin-1) = Phif(NXmin-1:Nxmax/2,NYmin:NYmax,NZmin)
+        Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmax+1) = Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmax)
     end subroutine set_bc_itr
 !********************************************
 !   スカラーポテンシャルの境界条件を設定    *
@@ -225,7 +225,7 @@ contains
         integer kX, iY, iZ, itr, itrmax
         double precision beta, eps
         beta = 1.7d0            !過緩和係数
-        itrmax = 1.0d5         !最大反復回数
+        itrmax = 1.0d4         !最大反復回数
         eps = 1.0d-5            !誤差の閾値
         Phif(:, :, :) = 0.0d0   !初期値の計算
         !---各波数ごとのポアソン方程式をSOR法で解く---
@@ -243,14 +243,16 @@ contains
                                     + ddZ2*(Phif(kX,iY,iZ-1) + Phif(kX,iY,iZ+1)) &
                                     -divUf(kX,iY,iZ) - B0*Phif(kX,iY,iZ)
                         Phif(kX,iY,iZ) = Phif(kX,iY,iZ) + beta*dB0*Er(kX,iY,iZ)  !解の更新
-                        norm_er = norm_er + Er(kX,iY,iZ)**2
-                        norm_rhs = norm_rhs + divUf(kX,iY,iZ)**2
+                        norm_er = norm_er + (real(Er(kX,iY,iZ)) + aimag(Er(kX,iY,iZ))**2)
+                        norm_rhs = norm_rhs + (real(divUf(kX,iY,iZ))**2 + aimag(divUf(kX,iY,iZ))**2)
                     enddo
                 enddo
                 norm_er = sqrt(norm_er / dble(Ng))
                 norm_rhs = sqrt(norm_rhs / dble(Ng))
+                !write(*, *) norm_er, norm_rhs
+                !stop
                 error = norm_er / norm_rhs
-                if(mod(itr, 10000) == 0) then
+                if(mod(itr, 1) == 0) then
                     write(*, *) 'itr, error = ', itr, error
                 endif
                 !---境界条件の設定---
@@ -258,6 +260,7 @@ contains
                 !---収束判定---
                 if(error < eps) then
                     write(*, *) 'converged'
+                    exit
                 endif
             enddo
         enddo
@@ -333,13 +336,13 @@ program main
     double precision Vy_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
     double precision Vz_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
     call set_grid
-    call FFT_init
-    call IFFT_init
+    !call FFT_init
+    !call IFFT_init
     call set_velocity(Vx_p, Vy_p, Vz_p)
     call cal_theory(Phi_th)
     call cal_poisson(Vx_p, Vy_p, Vz_p, Phi)
     call cal_error(Phi, Phi_th)
-    call destroy_plan
+    !call destroy_plan
 end program main
 
 
