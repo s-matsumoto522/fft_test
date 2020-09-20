@@ -102,22 +102,6 @@ contains
             enddo
         enddo
     end subroutine cal_poisson_rhs
-!******************************
-!   フーリエ変換のplan生成    *
-!******************************
-!    subroutine FFT_init
-!        double precision AL(NXmin:NXmax)
-!        complex(kind(0d0)) BL(NXmin-1:NXmax/2)
-!        call dfftw_plan_dft_r2c_1d(plan_1d_fft, NXmax, AL, BL, FFTW_ESTIMATE)
-!    end subroutine FFT_init
-!********************************
-!   逆フーリエ変換のplan生成    *
-!********************************
-!    subroutine IFFT_init
-!        double precision AL(NXmin-1:NXmax+1)
-!        complex(kind(0d0)) BL(NXmin-1:(NXmax+1)/2)
-!        call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax+1, BL, AL, FFTW_ESTIMATE)
-!    end subroutine IFFT_init
 !************************
 !   FFT(1次元)を実行    *
 !************************
@@ -133,20 +117,13 @@ contains
 !   IFFT(1次元)を実行   *
 !************************
     subroutine IFFT_1d_exe(Pf, P)
-        complex(kind(0d0)), intent(in) :: Pf(NXmin-1:(NXmax+1)/2)
-        double precision, intent(out) :: P(NXmin-1:NXmax+1)
+        complex(kind(0d0)), intent(in) :: Pf(NXmin-1:NXmax/2)
+        double precision, intent(out) :: P(NXmin:NXmax)
         double precision plan_1d_ifft
-        call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax+1, Pf, P, FFTW_ESTIMATE)
+        call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax, Pf, P, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_ifft, Pf, P)
         call dfftw_destroy_plan(plan_1d_ifft)
     end subroutine IFFT_1d_exe
-!******************
-!   planを破壊    *
-!******************
-!    subroutine destroy_plan
-!        call dfftw_destroy_plan(plan_1d_fft)
-!        call dfftw_destroy_plan(plan_1d_ifft)
-!    end subroutine destroy_plan
 !***************************************
 !   ポアソン方程式の右辺をFFT(x方向)   *
 !***************************************
@@ -160,18 +137,8 @@ contains
             do iY = NYmin, NYmax
                 RHS(NXmin:NXmax) = divU(NXmin:NXmax, iY, iZ)
                 call FFT_1d_exe(RHS, RHSf)
-                !write(*, *) RHSf
-                !stop
                 divUf(NXmin-1:NXmax/2, iY, iZ) = RHSf(NXmin-1:NXmax/2)
-                !write(*, *) divUf(:, iY, iZ)
-                !stop
-                !do kX = NXmin-1, NXmax/2
-                !    open(20, file = 'debug_fft_poisson.dat')
-                !    write(20, '(i2, e15.4, e15.4)') kX, divUf(kX, iY, iZ)
-                !enddo
-                !write(20, *) ''
             enddo
-            !write(20, *) '--------------------------------------------------------------------'
         enddo
     end subroutine FFT_rhs
 !****************************************
@@ -180,18 +147,18 @@ contains
     subroutine IFFT_Phif(Phif, Phi)
         complex(kind(0d0)), intent(in) :: Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        double precision P(NXmin-1:NXmax+1)
+        double precision P(NXmin:NXmax)
         complex(kind(0d0)) Pf(NXmin-1:NXmax/2)
         integer iY, iZ
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
                 Pf(NXmin-1:NXmax/2) = Phif(NXmin-1:NXmax/2, iY, iZ)
                 call IFFT_1d_exe(Pf, P)
-                Phi(NXmin-1:NXmax+1, iY, iZ) = P(NXmin-1:NXmax+1)
+                Phi(NXmin:NXmax, iY, iZ) = P(NXmin:NXmax)
             enddo
         enddo
         !---逆フーリエ変換で得た値を規格化---
-        Phi(:, :, :) = Phi(:, :, :) / dble(NXmax + 1)
+        Phi(NXmin:NXmax,NYmin-1:NYmax+1,NZmin-1:NZmax+1) = Phi(NXmin:NXmax,NYmin-1:NYmax+1,NZmin-1:NZmax+1)/dble(NXmax+1)
     end subroutine IFFT_Phif
 !********************************************
 !   反復計算中の境界条件を設定(y, z方向)    *
@@ -208,19 +175,7 @@ contains
 !********************************************
     subroutine set_bc(Phi)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        Phi(NXmin+1,NYmin:NYmax,NZmin:NZmax) = Phi(NXmax-1,NYmin:NYmax,NZmin:NZmax)
-        !Phi(NXmin:NXmax,NYmin-1,NZmin:NZmax) = -ddt*(cos(X(NXmin:NXmax,NYmin-1,NZmin:NZmax)) &
-        !                                        + cos(Y(NXmin:NXmax,NYmin-1,NZmin:NZmax)) &
-        !                                        + cos(Z(NXmin:NXmax,NYmin-1,NZmin:NZmax)))
-        !Phi(NXmin:NXmax,NYmax+1,NZmin:NZmax) = -ddt*(cos(X(NXmin:NXmax,NYmax+1,NZmin:NZmax)) &
-        !                                        + cos(Y(NXmin:NXmax,NYmax+1,NZmin:NZmax)) &
-        !                                        + cos(Z(NXmin:NXmax,NYmax+1,NZmin:NZmax)))
-        !Phi(NXmin:NXmax,NYmin:NYmax,NZmin-1) = -ddt*(cos(X(NXmin:NXmax,NYmin:NYmax,NZmin-1)) &
-        !                                        + cos(Y(NXmin:NXmax,NYmin:NYmax,NZmin-1)) &
-        !                                        + cos(Z(NXmin:NXmax,NYmin:NYmax,NZmin-1)))
-        !Phi(NXmin:NXmax,NYmin:NYmax,NZmax+1) = -ddt*(cos(X(NXmin:NXmax,NYmin:NYmax,NZmax+1)) &
-        !                                        + cos(Y(NXmin:NXmax,NYmin:NYmax,NZmax+1)) &
-        !                                        + cos(Z(NXmin:NXmax,NYmin:NYmax,NZmax+1)))
+        Phi(NXmax+1,NYmin:NYmax,NZmin:NZmax) = Phi(NXmin-1,NYmin:NYmax,NZmin:NZmax)
         Phi(NXmin:NXmax,NYmin-1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmin,NZmin:NZmax)
         Phi(NXmin:NXmax,NYmax+1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmax,NZmin:NZmax)
         Phi(NXmin:NXmax,NYmin:NYmax,NZmin-1) = Phi(NXmin:NXmax,NYmin:NYmax,NZmin)
@@ -237,7 +192,7 @@ contains
         integer kX, iY, iZ, itr, itrmax
         double precision beta, eps
         beta = 1.7d0            !過緩和係数
-        itrmax = 1.0d5         !最大反復回数
+        itrmax = 1.0d5          !最大反復回数
         eps = 1.0d-4            !誤差の閾値
         Phif(:, :, :) = 0.0d0   !初期値の計算
         !---各波数ごとのポアソン方程式をSOR法で解く---
@@ -308,6 +263,7 @@ contains
         double precision C(NXmin:NXmax, NYmin:NYmax, NZmin:NZmax), C_ave
         integer iX, iY, iZ
         !---積分定数の計算---
+        C_ave = 0.0d0
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
                 do iX = NXmin, NXmax
@@ -348,13 +304,10 @@ program main
     double precision Vy_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
     double precision Vz_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
     call set_grid
-    !call FFT_init
-    !call IFFT_init
     call set_velocity(Vx_p, Vy_p, Vz_p)
     call cal_theory(Phi_th)
     call cal_poisson(Vx_p, Vy_p, Vz_p, Phi)
     call cal_error(Phi, Phi_th)
-    !call destroy_plan
 end program main
 
 
