@@ -2,9 +2,9 @@ module fft_poisson_test
     implicit none
     include 'fftw3.f'
     double precision, parameter :: pi = acos(-1.0d0)
-    integer, parameter :: NXmin = 1, NXmax = 64     !x方向の計算領域の形状
-    integer, parameter :: NYmin = 1, NYmax = 64     !y方向の計算領域の形状
-    integer, parameter :: NZmin = 1, NZmax = 64     !z方向の計算領域の形状
+    integer, parameter :: NXmin = 1, NXmax = 32     !x方向の計算領域の形状
+    integer, parameter :: NYmin = 1, NYmax = 32     !y方向の計算領域の形状
+    integer, parameter :: NZmin = 1, NZmax = 32     !z方向の計算領域の形状
     double precision, parameter :: Xmax = 2.0d0*pi, Ymax = 2.0d0*pi, Zmax = 2.0d0*pi  !各方向の計算領域の最大値
     double precision, parameter :: NU = 1.0d0       !動粘性係数
     double precision, parameter :: dt = 1.0d0      !時間の刻み幅
@@ -123,6 +123,8 @@ contains
         call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax, Pf, P, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_ifft, Pf, P)
         call dfftw_destroy_plan(plan_1d_ifft)
+        !---規格化---
+        P(:) = P(:) / dble(NXmax)
     end subroutine IFFT_1d_exe
 !***************************************
 !   ポアソン方程式の右辺をFFT(x方向)   *
@@ -132,7 +134,7 @@ contains
         complex(kind(0d0)), intent(out) :: divUf(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
         double precision RHS(NXmin:NXmax)
         complex(kind(0d0)) RHSf(NXmin-1:NXmax/2)
-        integer iY, iZ, kX
+        integer iY, iZ
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
                 RHS(NXmin:NXmax) = divU(NXmin:NXmax, iY, iZ)
@@ -157,8 +159,6 @@ contains
                 Phi(NXmin:NXmax, iY, iZ) = P(NXmin:NXmax)
             enddo
         enddo
-        !---逆フーリエ変換で得た値を規格化---
-        Phi(NXmin:NXmax,NYmin-1:NYmax+1,NZmin-1:NZmax+1) = Phi(NXmin:NXmax,NYmin-1:NYmax+1,NZmin-1:NZmax+1)/dble(NXmax+1)
     end subroutine IFFT_Phif
 !********************************************
 !   反復計算中の境界条件を設定(y, z方向)    *
