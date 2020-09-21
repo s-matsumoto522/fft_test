@@ -2,13 +2,13 @@ module fft_poisson_test
     implicit none
     include 'fftw3.f'
     double precision, parameter :: pi = acos(-1.0d0)
-    integer, parameter :: NXmin = 1, NXmax = 32     !x方向の計算領域の形状
-    integer, parameter :: NYmin = 1, NYmax = 32     !y方向の計算領域の形状
-    integer, parameter :: NZmin = 1, NZmax = 32     !z方向の計算領域の形状
+    integer, parameter :: NXmin = 1, NXmax = 64     !x方向の計算領域の形状
+    integer, parameter :: NYmin = 1, NYmax = 64     !y方向の計算領域の形状
+    integer, parameter :: NZmin = 1, NZmax = 64     !z方向の計算領域の形状
     double precision, parameter :: Xmax = 2.0d0*pi, Ymax = 2.0d0*pi, Zmax = 2.0d0*pi  !各方向の計算領域の最大値
     double precision, parameter :: NU = 1.0d0       !動粘性係数
     double precision, parameter :: dt = 1.0d0      !時間の刻み幅
-    integer, save :: Ng                             !格子点数
+    integer, save :: Ng                             !全格子点数
     double precision, save :: ddt                   !時間の刻み幅の逆数
     double precision, save :: dX, dY, dZ            !各方向の刻み幅
     double precision, save :: ddX, ddY, ddZ         !各方向の刻み幅の逆数
@@ -175,8 +175,8 @@ contains
 !********************************************
     subroutine set_bc(Phi)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        Phi(NXmax+1,NYmin:NYmax,NZmin:NZmax) = Phi(NXmin-1,NYmin:NYmax,NZmin:NZmax)
-        Phi(NXmin:NXmax,NYmin-1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmin,NZmin:NZmax)
+        Phi(NXmax+1,NYmin:NYmax,NZmin:NZmax) = Phi(NXmin-1,NYmin:NYmax,NZmin:NZmax)         !周期境界
+        Phi(NXmin:NXmax,NYmin-1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmin,NZmin:NZmax)           !ノイマン条件
         Phi(NXmin:NXmax,NYmax+1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmax,NZmin:NZmax)
         Phi(NXmin:NXmax,NYmin:NYmax,NZmin-1) = Phi(NXmin:NXmax,NYmin:NYmax,NZmin)
         Phi(NXmin:NXmax,NYmin:NYmax,NZmax+1) = Phi(NXmin:NXmax,NYmin:NYmax,NZmax)
@@ -189,12 +189,13 @@ contains
         complex(kind(0d0)), intent(out) :: Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         complex(kind(0d0)) Er(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
         double precision B0, dB0, norm_er, norm_rhs, error
-        integer kX, iY, iZ, itr, itrmax
+        integer kX, iY, iZ, itr, itrmax, N_2dg
         double precision beta, eps
+        N_2dg = (NYmax - NYmin + 1)*(NZmax - NZmin + 1)     !y, z方向のみの格子点数
         beta = 1.7d0            !過緩和係数
         itrmax = 1.0d5          !最大反復回数
-        eps = 1.0d-4            !誤差の閾値
-        Phif(:, :, :) = 0.0d0   !初期値の計算
+        eps = 1.0d-5            !誤差の閾値
+        Phif(:, :, :) = (0.0d0, 0.0d0)   !初期値の計算
         !---各波数ごとのポアソン方程式をSOR法で解く---
         do kX = NXmin-1, NXmax/2
             B0 = 2.0d0*(ddX2*(1.0d0 - cos(dble(kX)*dX)) + ddY2 + ddZ2)
@@ -214,8 +215,8 @@ contains
                         norm_rhs = norm_rhs + sqrt(real(divUf(kX,iY,iZ))**2 + aimag(divUf(kX,iY,iZ))**2)
                     enddo
                 enddo
-                norm_er = sqrt(norm_er / dble(Ng))
-                norm_rhs = sqrt(norm_rhs / dble(Ng))
+                norm_er = sqrt(norm_er / dble(N_2dg))
+                norm_rhs = sqrt(norm_rhs / dble(N_2dg))
                 error = norm_er / norm_rhs
                 if(mod(itr, 100) == 0) then
                     write(*, *) 'itr, error = ', itr, error
