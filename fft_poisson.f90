@@ -37,16 +37,16 @@ contains
         ddZ2 = 1.0d0 / (dZ**2)
         Ng = (NXmax - NXmin + 1)*(NYmax - NYmin + 1)*(NZmax - NZmin + 1)
         !---各方向の計算領域の最小値を計算---
-        Xmin = dX*dble(NXmin)
-        Ymin = dY*dble(NYmin)
-        Zmin = dZ*dble(NZmin)
+        Xmin = 0.0d0
+        Ymin = 0.0d0
+        Zmin = 0.0d0
         !---格子点の設定---
         do iZ = NZmin-1, NZmax+1
             do iY = NYmin-1, NYmax+1
                 do iX = NXmin-1, NXmax+1
-                    X(iX, iY, iZ) = dX*dble(iX)
-                    Y(iX, iY, iZ) = dY*dble(iY)
-                    Z(iX, iY, iZ) = dZ*dble(iZ)
+                    X(iX, iY, iZ) = Xmin + dX*dble(iX-1)
+                    Y(iX, iY, iZ) = Ymin + dY*dble(iY-1)
+                    Z(iX, iY, iZ) = Zmin + dZ*dble(iZ-1)
                 enddo
             enddo
         enddo
@@ -107,7 +107,7 @@ contains
 !************************
     subroutine FFT_1d_exe(RHS, RHSf)
         double precision, intent(in) :: RHS(NXmin:NXmax)
-        complex(kind(0d0)), intent(out) :: RHSf(NXmin-1:NXmax/2)
+        complex(kind(0d0)), intent(out) :: RHSf(0:NXmax/2)
         double precision plan_1d_fft
         call dfftw_plan_dft_r2c_1d(plan_1d_fft, NXmax, RHS, RHSf, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_fft, RHS, RHSf)
@@ -117,14 +117,17 @@ contains
 !   IFFT(1次元)を実行   *
 !************************
     subroutine IFFT_1d_exe(Pf, P)
-        complex(kind(0d0)), intent(in) :: Pf(NXmin-1:NXmax/2)
+        complex(kind(0d0)), intent(in) :: Pf(0:NXmax/2)
         double precision, intent(out) :: P(NXmin:NXmax)
         double precision plan_1d_ifft
+        integer i
         call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax, Pf, P, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_ifft, Pf, P)
         call dfftw_destroy_plan(plan_1d_ifft)
         !---規格化---
-        P(:) = P(:) / dble(NXmax)
+        do i = NXmin, NXmax
+            P(i) = P(i) / dble(NXmax)
+        enddo
     end subroutine IFFT_1d_exe
 !***************************************
 !   ポアソン方程式の右辺をFFT(x方向)   *
@@ -194,7 +197,7 @@ contains
         N_2dg = (NYmax - NYmin + 1)*(NZmax - NZmin + 1)     !y, z方向のみの格子点数
         beta = 1.7d0            !過緩和係数
         itrmax = 1.0d5          !最大反復回数
-        eps = 1.0d-5            !誤差の閾値
+        eps = 1.0d-6            !誤差の閾値
         Phif(:, :, :) = (0.0d0, 0.0d0)   !初期値の計算
         !---各波数ごとのポアソン方程式をSOR法で解く---
         do kX = NXmin-1, NXmax/2
@@ -281,7 +284,7 @@ contains
             do iY = NYmin, NYmax
                 do iX = NXmin, NXmax
                     Phi_num(iX,iY,iZ) = Phi(iX,iY,iZ) - C_ave
-                    error(iX,iY,iZ) = Phi_num(iX,iY,iZ) - Phi_th(iX,iY,iZ)
+                    error(iX,iY,iZ) = Phi(iX,iY,iZ) - Phi_th(iX,iY,iZ)
                     error_sum = error_sum + error(iX,iY,iZ)**2
                 enddo
             enddo
