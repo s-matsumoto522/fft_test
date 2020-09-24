@@ -77,8 +77,7 @@ contains
         integer iX, iY
         do iY = NYmin, NYmax
             do iX = NXmin, NXmax
-                divU(iX, iY) = ddt*(ddX*(-Vx_p(iX-1, iY) + Vx_p(iX, iY)) &
-                                    + ddY*(-Vy_p(iX, iY-1) + Vy_p(iX, iY)))
+                divU(iX, iY) = ddt*(cos(X(iX, iY)) + cos(Y(iX, iY)))
             enddo
         enddo
     end subroutine cal_poisson_rhs
@@ -255,6 +254,13 @@ contains
         double precision error(NXmin:NXmax, NYmin:NYmax), error_sum, norm_error
         double precision C(NXmin:NXmax, NYmin:NYmax), C_ave
         integer iX, iY
+        open(41, file = 'debug_error.dat')
+        do iY = NYmin, NYmax
+            do iX = NXmin, NXmax
+                write(41, *) Phi(iX, iY), Phi_th(iX, iY)
+            enddo
+            write(41, *) ''
+        enddo
         !---積分定数の計算---
         C_ave = 0.0d0
         do iY = NYmin, NYmax
@@ -270,7 +276,7 @@ contains
         do iY = NYmin, NYmax
             do iX = NXmin, NXmax
                 Phi_num(iX, iY) = Phi(iX, iY) - C_ave
-                error(iX, iY) = Phi_num(iX, iY) - Phi_th(iX, iY)
+                error(iX, iY) = Phi(iX, iY) - Phi_th(iX, iY)
                 error_sum = error_sum + error(iX, iY)**2
             enddo
         enddo
