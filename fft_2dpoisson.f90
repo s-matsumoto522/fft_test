@@ -114,12 +114,24 @@ contains
         complex(kind(0d0)), intent(out) :: divUf(0:NXmax/2, NYmin:NYmax)
         double precision RHS(NXmin:NXmax)
         complex(kind(0d0)) RHSf(0:NXmax/2)
-        integer iY
+        integer iY, kX
+        open(21, file = 'debug_divUf(2d).dat')
+        open(22, file = 'debug_RHS(2d).dat')
         do iY = NYmin, NYmax
             RHS(NXmin:NXmax) = divU(NXmin:NXmax, iY)
+            do kX = NXmin, NXmax
+                write(22, *) RHS(kX)
+            enddo
+            write(22, *) ''
             call FFT_1d_exe(RHS, RHSf)
             divUf(0:NXmax/2, iY) = RHSf(0:NXmax/2)
+            do kX = 0, NXmax/2
+                write(21, *) divUf(kX, iY)
+            enddo
+            write(21, *) ''
         enddo
+        close(21)
+        close(22)
     end subroutine FFT_rhs
 !****************************************
 !   スカラーポテンシャルをIFFT(x方向)   *
@@ -129,12 +141,24 @@ contains
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1)
         double precision P(NXmin:NXmax)
         complex(kind(0d0)) Pf(0:NXmax/2)
-        integer iY
+        integer iY, kX
+        open(31, file = 'debug_Phif(2d).dat')
+        open(32, file = 'debuf_Phi(2d).dat')
         do iY = NYmin, NYmax
+            do kX = 0, NXmax/2
+                write(31, *) Phif(kX, iY)
+            enddo
+            write(31, *) ''
             Pf(0:NXmax/2) = Phif(0:NXmax/2, iY)
             call IFFT_1d_exe(Pf, P)
             Phi(NXmin:NXmax, iY) = P(NXmin:NXmax)
+            do kX = NXmin, NXmax
+                write(32, *) Phi(kX, iY)
+            enddo
+            write(32, *)''
         enddo
+        close(31)
+        close(32)
     end subroutine IFFT_Phif
 !****************************************
 !   反復計算中の境界条件を設定(y方向)   *
