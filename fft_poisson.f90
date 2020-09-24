@@ -178,7 +178,8 @@ contains
 !********************************************
     subroutine set_bc(Phi)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        Phi(NXmax+1,NYmin:NYmax,NZmin:NZmax) = Phi(NXmin-1,NYmin:NYmax,NZmin:NZmax)         !周期境界
+        Phi(NXmax+1,NYmin-1:NYmax+1,NZmin-1:NZmax+1) = Phi(NXmin,NYmin-1:NYmax+1,NZmin-1:NZmax+1)          !周期境界
+        Phi(NXmin-1,NYmin-1:NYmax+1,NZmin-1:NZmax+1) = Phi(NXmax,NYmin-1:NYmax+1,NZmin-1:NZmax+1)
         Phi(NXmin:NXmax,NYmin-1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmin,NZmin:NZmax)           !ノイマン条件
         Phi(NXmin:NXmax,NYmax+1,NZmin:NZmax) = Phi(NXmin:NXmax,NYmax,NZmin:NZmax)
         Phi(NXmin:NXmax,NYmin:NYmax,NZmin-1) = Phi(NXmin:NXmax,NYmin:NYmax,NZmin)
@@ -284,7 +285,7 @@ contains
             do iY = NYmin, NYmax
                 do iX = NXmin, NXmax
                     Phi_num(iX,iY,iZ) = Phi(iX,iY,iZ) - C_ave
-                    error(iX,iY,iZ) = Phi(iX,iY,iZ) - Phi_th(iX,iY,iZ)
+                    error(iX,iY,iZ) = Phi_num(iX,iY,iZ) - Phi_th(iX,iY,iZ)
                     error_sum = error_sum + error(iX,iY,iZ)**2
                 enddo
             enddo
