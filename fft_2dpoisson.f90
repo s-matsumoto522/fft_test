@@ -162,10 +162,11 @@ contains
 !****************************************
 !   反復計算中の境界条件を設定(y方向)   *
 !****************************************
-    subroutine set_bc_itr(Phif)
+    subroutine set_bc_itr(Phif, kX)
+        integer, intent(in) :: kX
         complex(kind(0d0)), intent(out) :: Phif(0:NXmax/2, NYmin-1:NYmax+1)
-        Phif(0:NXmax/2, NYmin-1) = Phif(0:NXmax/2, NYmin)   !ノイマン条件
-        Phif(0:NXmax/2, NYmax+1) = Phif(0:NXmax/2, NYmax)
+        Phif(kX, NYmin-1) = Phif(kX, NYmin)   !ノイマン条件
+        Phif(kX, NYmax+1) = Phif(kX, NYmax)
     end subroutine set_bc_itr
 !********************************************
 !   スカラーポテンシャルの境界条件を設定    *
@@ -189,7 +190,7 @@ contains
         double precision beta, eps
         beta = 1.7d0        !過緩和係数
         itrmax = 1.0d5      !最大反復回数
-        eps = 1.0d-6        !誤差の閾値
+        eps = 1.0d-5        !誤差の閾値
         Phif(:, :) = (0.0d0, 0.0d0)     !初期値の設定
         !---各波数毎にポアソン方程式をSOR法で解く----
         do kX = 0, NXmax/2
@@ -214,7 +215,7 @@ contains
                     write(*, *) 'itr, error = ', itr, error
                 endif
                 !---境界条件の設定---
-                call set_bc_itr(Phif)
+                call set_bc_itr(Phif, kX)
                 !---収束判定---
                 if(error < eps) then
                     write(*, *) 'poisson is converged.'
@@ -254,13 +255,22 @@ contains
         double precision error(NXmin:NXmax, NYmin:NYmax), error_sum, norm_error
         double precision C(NXmin:NXmax, NYmin:NYmax), C_ave
         integer iX, iY
-        open(41, file = 'debug_error.dat')
-        do iY = NYmin, NYmax
-            do iX = NXmin, NXmax
-                write(41, *) Phi(iX, iY), Phi_th(iX, iY)
+        open(41, file = 'Phi_graph.dat')
+        open(42, file = 'Phi_th_graph.dat')
+        open(43, file = 'debug_error.dat')
+        do iX = NXmin, NXmax
+            do iY = NYmin, NYmax
+                write(41, *) X(iX, iY), Y(iX, iY), Phi(iX, iY)
+                write(42, *) X(iX, iY), Y(iX, iY), Phi_th(iX, iY)
+                write(43, *) Phi(iX, iY), Phi_th(iX, iY)
             enddo
             write(41, *) ''
+            write(42, *) ''
+            write(43, *) ''
         enddo
+        close(41)
+        close(42)
+        close(43)
         !---積分定数の計算---
         C_ave = 0.0d0
         do iY = NYmin, NYmax
