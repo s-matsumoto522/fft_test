@@ -2,9 +2,9 @@ module fft_poisson_test
     implicit none
     include 'fftw3.f'
     double precision, parameter :: pi = acos(-1.0d0)
-    integer, parameter :: NXmin = 1, NXmax = 32     !x方向の計算領域の形状
-    integer, parameter :: NYmin = 1, NYmax = 32     !y方向の計算領域の形状
-    integer, parameter :: NZmin = 1, NZmax = 32     !z方向の計算領域の形状
+    integer, parameter :: NXmin = 1, NXmax = 256     !x方向の計算領域の形状
+    integer, parameter :: NYmin = 1, NYmax = 256     !y方向の計算領域の形状
+    integer, parameter :: NZmin = 1, NZmax = 256     !z方向の計算領域の形状
     double precision, parameter :: Xmax = 2.0d0*pi, Ymax = 2.0d0*pi, Zmax = 2.0d0*pi  !各方向の計算領域の最大値
     double precision, parameter :: NU = 1.0d0       !動粘性係数
     double precision, parameter :: dt = 1.0d0      !時間の刻み幅
@@ -95,9 +95,7 @@ contains
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
                 do iX = NXmin, NXmax
-                    divU(iX,iY,iZ) = ddt*(ddX*(-Vx_p(iX-1,iY,iZ) + Vx_p(iX,iY,iZ)) &
-                                    + ddY*(-Vy_p(iX,iY-1,iZ) + Vy_p(iX,iY,iZ)) &
-                                    + ddZ*(-Vz_p(iX,iY,iZ-1) + Vz_p(iX,iY,iZ)))
+                    divU(iX,iY,iZ) = ddt*(cos(X(iX,iY,iZ)) + cos(Y(iX,iY,iZ)) + cos(Z(iX,iY,iZ)))
                 enddo
             enddo
         enddo
@@ -120,14 +118,11 @@ contains
         complex(kind(0d0)), intent(in) :: Pf(0:NXmax/2)
         double precision, intent(out) :: P(NXmin:NXmax)
         double precision plan_1d_ifft
-        integer i
         call dfftw_plan_dft_c2r_1d(plan_1d_ifft, NXmax, Pf, P, FFTW_ESTIMATE)
         call dfftw_execute(plan_1d_ifft, Pf, P)
         call dfftw_destroy_plan(plan_1d_ifft)
         !---規格化---
-        do i = NXmin, NXmax
-            P(i) = P(i) / dble(NXmax)
-        enddo
+        P(:) = P(:) / dble(NXmax)
     end subroutine IFFT_1d_exe
 !***************************************
 !   ポアソン方程式の右辺をFFT(x方向)   *
@@ -150,14 +145,14 @@ contains
 !   スカラーポテンシャルをIFFT(x方向)   *
 !****************************************
     subroutine IFFT_Phif(Phif, Phi)
-        complex(kind(0d0)), intent(in) :: Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
+        complex(kind(0d0)), intent(in) :: Phif(0:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         double precision P(NXmin:NXmax)
-        complex(kind(0d0)) Pf(NXmin-1:NXmax/2)
+        complex(kind(0d0)) Pf(0:NXmax/2)
         integer iY, iZ
         do iZ = NZmin, NZmax
             do iY = NYmin, NYmax
-                Pf(NXmin-1:NXmax/2) = Phif(NXmin-1:NXmax/2, iY, iZ)
+                Pf(0:NXmax/2) = Phif(0:NXmax/2, iY, iZ)
                 call IFFT_1d_exe(Pf, P)
                 Phi(NXmin:NXmax, iY, iZ) = P(NXmin:NXmax)
             enddo
@@ -166,12 +161,13 @@ contains
 !********************************************
 !   反復計算中の境界条件を設定(y, z方向)    *
 !********************************************
-    subroutine set_bc_itr(Phif)
-        complex(kind(0d0)), intent(out) :: Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        Phif(NXmin-1:NXmax/2,NYmin-1,NZmin:NZmax) = Phif(NXmin-1:NXmax/2,NYmin,NZmin:NZmax)
-        Phif(NXmin-1:Nxmax/2,NYmax+1,NZmin:NZmax) = Phif(NXmin-1:NXmax/2,NYmax,NZmin:NZmax)
-        Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmin-1) = Phif(NXmin-1:Nxmax/2,NYmin:NYmax,NZmin)
-        Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmax+1) = Phif(NXmin-1:NXmax/2,NYmin:NYmax,NZmax)
+    subroutine set_bc_itr(Phif, kX)
+        integer, intent(in) :: kX
+        complex(kind(0d0)), intent(out) :: Phif(0:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
+        Phif(kX,NYmin-1,NZmin:NZmax) = Phif(kX,NYmax,NZmin:NZmax)
+        Phif(kX,NYmax+1,NZmin:NZmax) = Phif(kX,NYmin,NZmin:NZmax)
+        Phif(kX,NYmin:NYmax,NZmin-1) = Phif(kX,NYmin:NYmax,NZmax)
+        Phif(kX,NYmin:NYmax,NZmax+1) = Phif(kX,NYmin:NYmax,NZmin)
     end subroutine set_bc_itr
 !********************************************
 !   スカラーポテンシャルの境界条件を設定    *
@@ -189,9 +185,9 @@ contains
 !   ポアソン方程式の反復計算    *
 !********************************
     subroutine itr_poisson(divUf, Phif)
-        complex(kind(0d0)), intent(in) :: divUf(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
-        complex(kind(0d0)), intent(out) :: Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
-        complex(kind(0d0)) Er(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        complex(kind(0d0)), intent(in) :: divUf(0:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        complex(kind(0d0)), intent(out) :: Phif(0:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
+        complex(kind(0d0)) Er(0:NXmax/2, NYmin:NYmax, NZmin:NZmax)
         double precision B0, dB0, norm_er, norm_rhs, error
         integer kX, iY, iZ, itr, itrmax, N_2dg
         double precision beta, eps
@@ -201,7 +197,7 @@ contains
         eps = 1.0d-6            !誤差の閾値
         Phif(:, :, :) = (0.0d0, 0.0d0)   !初期値の計算
         !---各波数ごとのポアソン方程式をSOR法で解く---
-        do kX = NXmin-1, NXmax/2
+        do kX = 0, NXmax/2
             B0 = 2.0d0*(ddX2*(1.0d0 - cos(dble(kX)*dX)) + ddY2 + ddZ2)
             dB0 = 1.0d0 / B0
             do itr = 1, itrmax
@@ -226,7 +222,7 @@ contains
                     write(*, *) 'itr, error = ', itr, error
                 endif
                 !---境界条件の設定---
-                call set_bc_itr(Phif)
+                call set_bc_itr(Phif, kX)
                 !---収束判定---
                 if(error < eps) then
                     write(*, *) 'converged'
@@ -244,8 +240,8 @@ contains
         double precision, intent(in) :: Vz_p(NXmin-1:NXmax, NYmin-1:NYmax, NZmin-1:NZmax)
         double precision, intent(out) :: Phi(NXmin-1:NXmax+1, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         double precision divU(NXmin:NXmax, NYmin:NYmax, NZmin:NZmax)
-        complex(kind(0d0)) divUf(NXmin-1:NXmax/2, NYmin:NYmax, NZmin:NZmax)
-        complex(kind(0d0)) Phif(NXmin-1:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
+        complex(kind(0d0)) divUf(0:NXmax/2, NYmin:NYmax, NZmin:NZmax)
+        complex(kind(0d0)) Phif(0:NXmax/2, NYmin-1:NYmax+1, NZmin-1:NZmax+1)
         !---右辺を計算---
         call cal_poisson_rhs(Vx_p, Vy_p, Vz_p, divU)
         !---右辺をFFT---

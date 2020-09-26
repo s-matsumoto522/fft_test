@@ -2,8 +2,8 @@ module fft_2dpoisson
     implicit none
     include 'fftw3.f'
     double precision, parameter :: pi = acos(-1.d0)
-    integer, parameter :: NXmin = 1, NXmax = 32     !x方向の計算形状
-    integer, parameter :: NYmin = 1, NYmax = 32     !y方向の計算形状
+    integer, parameter :: NXmin = 1, NXmax = 256     !x方向の計算形状
+    integer, parameter :: NYmin = 1, NYmax = 256     !y方向の計算形状
     double precision, parameter :: Xmax = 2.0d0*pi, Ymax = 2.0d0*pi     !各方向の計算領域の最大値
     double precision, parameter :: dt = 1.0d0       !時間刻み幅
     integer, save :: Ng                             !総格子点数
@@ -114,23 +114,23 @@ contains
         double precision RHS(NXmin:NXmax)
         complex(kind(0d0)) RHSf(0:NXmax/2)
         integer iY, kX
-        open(21, file = 'debug_divUf(2d).dat')
-        open(22, file = 'debug_RHS(2d).dat')
+        !open(21, file = 'debug_divUf(2d).dat')
+        !open(22, file = 'debug_RHS(2d).dat')
         do iY = NYmin, NYmax
             RHS(NXmin:NXmax) = divU(NXmin:NXmax, iY)
-            do kX = NXmin, NXmax
-                write(22, *) RHS(kX)
-            enddo
-            write(22, *) ''
+            !do kX = NXmin, NXmax
+            !    write(22, *) RHS(kX)
+            !enddo
+            !write(22, *) ''
             call FFT_1d_exe(RHS, RHSf)
             divUf(0:NXmax/2, iY) = RHSf(0:NXmax/2)
-            do kX = 0, NXmax/2
-                write(21, *) divUf(kX, iY)
-            enddo
-            write(21, *) ''
+            !do kX = 0, NXmax/2
+            !    write(21, *) divUf(kX, iY)
+            !enddo
+            !write(21, *) ''
         enddo
-        close(21)
-        close(22)
+        !close(21)
+        !close(22)
     end subroutine FFT_rhs
 !****************************************
 !   スカラーポテンシャルをIFFT(x方向)   *
@@ -141,23 +141,23 @@ contains
         double precision P(NXmin:NXmax)
         complex(kind(0d0)) Pf(0:NXmax/2)
         integer iY, kX
-        open(31, file = 'debug_Phif(2d).dat')
-        open(32, file = 'debuf_Phi(2d).dat')
+        !open(31, file = 'debug_Phif(2d).dat')
+        !open(32, file = 'debuf_Phi(2d).dat')
         do iY = NYmin, NYmax
-            do kX = 0, NXmax/2
-                write(31, *) Phif(kX, iY)
-            enddo
-            write(31, *) ''
+            !do kX = 0, NXmax/2
+            !    write(31, *) Phif(kX, iY)
+            !enddo
+            !write(31, *) ''
             Pf(0:NXmax/2) = Phif(0:NXmax/2, iY)
             call IFFT_1d_exe(Pf, P)
             Phi(NXmin:NXmax, iY) = P(NXmin:NXmax)
-            do kX = NXmin, NXmax
-                write(32, *) Phi(kX, iY)
-            enddo
-            write(32, *)''
+            !do kX = NXmin, NXmax
+            !    write(32, *) Phi(kX, iY)
+            !enddo
+            !write(32, *)''
         enddo
-        close(31)
-        close(32)
+        !close(31)
+        !close(32)
     end subroutine IFFT_Phif
 !****************************************
 !   反復計算中の境界条件を設定(y方向)   *
@@ -165,8 +165,8 @@ contains
     subroutine set_bc_itr(Phif, kX)
         integer, intent(in) :: kX
         complex(kind(0d0)), intent(out) :: Phif(0:NXmax/2, NYmin-1:NYmax+1)
-        Phif(kX, NYmin-1) = Phif(kX, NYmin)   !ノイマン条件
-        Phif(kX, NYmax+1) = Phif(kX, NYmax)
+        Phif(kX, NYmin-1) = Phif(kX, NYmax)
+        Phif(kX, NYmax+1) = Phif(kX, NYmin)
     end subroutine set_bc_itr
 !********************************************
 !   スカラーポテンシャルの境界条件を設定    *
@@ -258,11 +258,11 @@ contains
         open(41, file = 'Phi_graph.dat')
         open(42, file = 'Phi_th_graph.dat')
         open(43, file = 'debug_error.dat')
-        do iX = NXmin, NXmax
-            do iY = NYmin, NYmax
+        do iY = NXmin, NXmax
+            do iX = NYmin, NYmax
                 write(41, *) X(iX, iY), Y(iX, iY), Phi(iX, iY)
                 write(42, *) X(iX, iY), Y(iX, iY), Phi_th(iX, iY)
-                write(43, *) Phi(iX, iY), Phi_th(iX, iY)
+                write(43, *) Phi(iX, iY), Phi_th(iX, iY), (Phi(iX, iY) - Phi_th(iX, iY))
             enddo
             write(41, *) ''
             write(42, *) ''
@@ -286,7 +286,7 @@ contains
         do iY = NYmin, NYmax
             do iX = NXmin, NXmax
                 Phi_num(iX, iY) = Phi(iX, iY) - C_ave
-                error(iX, iY) = Phi(iX, iY) - Phi_th(iX, iY)
+                error(iX, iY) = Phi_num(iX, iY) - Phi_th(iX, iY)
                 error_sum = error_sum + error(iX, iY)**2
             enddo
         enddo
